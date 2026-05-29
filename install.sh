@@ -7,6 +7,8 @@ bindir="${MIHOMO_BIN_DIR:-$HOME/.local/bin}"
 unitdir="${MIHOMO_SYSTEMD_USER_DIR:-$HOME/.config/systemd/user}"
 proxy_port="${MIHOMO_PROXY_PORT:-31890}"
 controller_port="${MIHOMO_CONTROLLER_PORT:-31990}"
+subscription_file="${MIHOMO_SUBSCRIPTION_FILE:-$bindir/subscription.url}"
+subscription_link="$confdir/subscription.url"
 
 usage() {
   cat <<'EOF'
@@ -100,11 +102,30 @@ dst.write_text(text, encoding="utf-8")
 dst.chmod(0o600)
 PY
 
-if [ ! -f "$confdir/subscription.url" ]; then
-  install -m 600 "$repo_dir/config/subscription.url.example" "$confdir/subscription.url"
-  echo "Created example subscription file: $confdir/subscription.url"
-  echo "Edit it before running mihomo_restart."
+if [ ! -f "$subscription_file" ]; then
+  if [ -f "$subscription_link" ] && [ ! -L "$subscription_link" ]; then
+    install -m 600 "$subscription_link" "$subscription_file"
+    echo "Migrated existing subscription file to: $subscription_file"
+  else
+    install -m 600 "$repo_dir/config/subscription.url.example" "$subscription_file"
+    echo "Created example subscription file: $subscription_file"
+    echo "Edit it before running mihomo_restart."
+  fi
+else
+  chmod 600 "$subscription_file" 2>/dev/null || true
 fi
+
+if [ -e "$subscription_link" ] || [ -L "$subscription_link" ]; then
+  if [ ! -L "$subscription_link" ]; then
+    backup="$subscription_link.backup.$(date +%Y%m%d%H%M%S)"
+    mv "$subscription_link" "$backup"
+    echo "Backed up old config subscription file to: $backup"
+  else
+    rm -f "$subscription_link"
+  fi
+fi
+ln -s "$subscription_file" "$subscription_link"
+echo "Linked $subscription_link -> $subscription_file"
 
 helper_block="$(mktemp)"
 trap 'rm -f "$helper_block"' EXIT
@@ -297,7 +318,7 @@ echo "Install complete."
 echo "Configured proxy port: $proxy_port"
 echo "Configured controller port: $controller_port"
 echo "Next steps:"
-echo "  1. Put your subscription URL in: $confdir/subscription.url"
+echo "  1. Put your subscription URL in: $subscription_file"
 echo "     or run: mihomo_set_sub '<subscription_url>'"
 echo "  2. Ensure mihomo binary exists at: $bindir/mihomo"
 echo "  3. Run: source ~/.bashrc"
