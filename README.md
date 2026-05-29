@@ -13,6 +13,47 @@
 
 本仓库不包含订阅 token、节点 provider、cache 或个人密钥。
 
+## Quick Start
+
+```bash
+mkdir -p ~/.local/bin
+cd ~/.local/bin
+```
+
+下载 Mihomo 二进制。`x86_64` 机器用：
+
+```bash
+curl -L -C - --retry 20 --retry-delay 5 \
+  -o mihomo.gz \
+  https://github.com/MetaCubeX/mihomo/releases/download/v1.19.25/mihomo-linux-amd64-v1.19.25.gz
+gzip -d mihomo.gz
+chmod +x mihomo
+./mihomo -v
+```
+
+`aarch64` / `arm64` 机器用：
+
+```bash
+curl -L -C - --retry 20 --retry-delay 5 \
+  -o mihomo.gz \
+  https://github.com/MetaCubeX/mihomo/releases/download/v1.19.25/mihomo-linux-arm64-v1.19.25.gz
+gzip -d mihomo.gz
+chmod +x mihomo
+./mihomo -v
+```
+
+安装并启动代理：
+
+```bash
+cd ~
+git clone https://github.com/Futuresxy/mihomo_item.git
+cd mihomo_item
+bash install.sh --proxy-port 4789 --auto-port
+source ~/.bashrc
+mihomo_up '你的订阅地址'
+curl -I https://github.com
+```
+
 ## 文件
 
 ```text
@@ -196,6 +237,5 @@ tail -n 40 ~/.config/mihomo/mihomo.log
 
 ```bash
 source ~/.bashrc
-mihomo_restart
-proxy_on
+mihomo_up
 ```

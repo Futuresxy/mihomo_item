@@ -234,5 +234,4 @@ fi
 echo
 echo "Next commands:"
 echo "  source ~/.bashrc"
-echo "  mihomo_set_sub '<subscription_url>'"
-echo "  proxy_on"
+echo "  mihomo_up '<subscription_url>'"
