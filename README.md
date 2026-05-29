@@ -1,148 +1,103 @@
 # mihomo_item
 
-一个面向 Linux 服务器的 Mihomo 用户级代理模板。它把 mihomo 配置、订阅更新、shell/git/SSH 代理、节点测速和节点选择整理成一套可迁移脚本。
+一个简化的 Linux 服务器 Mihomo 配置模板。目标是少分叉、可排错：
 
-本仓库不包含订阅 token、节点 provider、cache 或任何个人密钥。
+- Mihomo 二进制固定放在 `~/.local/bin/mihomo`
+- 订阅地址固定放在 `~/.local/bin/subscription.url`
+- 配置固定放在 `~/.config/mihomo`
+- `.bashrc` 只 source 一个文件：`~/.config/mihomo/shell-proxy.sh`
+- 不依赖 `systemd --user`
+- 不使用 `nohup` 常驻；关闭 SSH 后如果进程退出，下次重新 `mihomo_restart` 即可
 
-## 目录
+本仓库不包含订阅 token、节点 provider、cache 或个人密钥。
+
+## 文件
 
 ```text
 bin/
-  mihomo-gen-config      # 下载订阅并生成 ~/.config/mihomo/config.yaml
-  mihomo-pick-node       # 按订阅原始顺序选择节点
-  mihomo-test-nodes      # 测试节点延迟，支持自动选择最快节点
+  mihomo-gen-config      # 下载订阅并生成 config.yaml
+  mihomo-pick-node       # 按原始顺序选择节点
+  mihomo-test-nodes      # 测试节点延迟
 config/
-  config.yaml.in         # mihomo 主配置模板
-  shell-proxy.sh         # proxy_on/proxy_off/proxy_status
+  config.yaml.in         # mihomo 配置模板
+  shell-proxy.sh         # proxy_on/proxy_off/mihomo_restart 等命令
   subscription.url.example
-systemd/
-  mihomo.service         # systemd --user 服务
-install.sh               # 安装脚本
+install.sh
 ```
 
-## 新服务器安装
+## 安装
 
-先准备 Mihomo 二进制：
+先把 mihomo 可执行文件放到固定位置：
 
 ```bash
 mkdir -p ~/.local/bin
-# 把 mihomo 二进制放到 ~/.local/bin/mihomo
+# 把真正的 mihomo 二进制放到 ~/.local/bin/mihomo
 chmod +x ~/.local/bin/mihomo
+~/.local/bin/mihomo -v
 ```
 
-然后安装本仓库配置：
+注意：`~/.local/bin/mihomo` 必须是可执行文件，不能是目录。
+
+安装配置：
 
 ```bash
 git clone git@github.com:Futuresxy/mihomo_item.git
 cd mihomo_item
-bash install.sh
-source ~/.bashrc
-```
-
-如果你希望使用自定义本地代理端口，例如 `4789`：
-
-```bash
 bash install.sh --proxy-port 4789
 source ~/.bashrc
 ```
 
-`--proxy-port` 配置的是 Mihomo `mixed-port`，同一个端口同时支持 HTTP 和 SOCKS。因此 `proxy_on` 会设置：
+`--proxy-port 4789` 会把 Mihomo `mixed-port` 配成 `4789`。HTTP、SOCKS、Git SSH 都走同一个端口。
 
-```text
-http_proxy=http://127.0.0.1:4789
-https_proxy=http://127.0.0.1:4789
-all_proxy=socks5://127.0.0.1:4789
-git SSH ProxyCommand -> 127.0.0.1:4789
-```
-
-## 必须修改哪里
-
-必须修改订阅地址：
+如果不确定端口是否被占用，可以让脚本自动选：
 
 ```bash
-mihomo_set_sub '你的订阅地址'
+bash install.sh --proxy-port auto
 ```
 
-或者手动编辑：
+或者给一个起始端口，忙了就顺延到下一个可用端口：
+
+```bash
+bash install.sh --proxy-port 4789 --auto-port
+```
+
+`127.0.0.1` 是本机回环地址。每台机器的 `127.0.0.1` 都只代表它自己；在服务器上就是服务器自己，在本地电脑上就是本地电脑自己。
+
+## 订阅地址
+
+固定编辑这个文件：
 
 ```bash
 ~/.local/bin/subscription.url
 ```
 
-订阅下载会自动使用 `flag=clash.meta`。使用 `mihomo_set_sub` 时不用手动加；手动编辑时只写原始订阅地址也可以，`mihomo_restart` 下载时会自动补充/替换。
-
-## 可能需要修改哪里
-
-如果端口冲突，推荐重新运行安装脚本指定端口：
+或者用命令写入：
 
 ```bash
-bash install.sh --proxy-port 4789
-source ~/.bashrc
+mihomo_set_sub '你的订阅地址'
 ```
 
-或者手动修改：
+脚本会自动使用 `flag=clash.meta`，不用手动加。
 
-```bash
-~/.config/mihomo/config.yaml.in
-```
+## 启动
 
-默认端口：
-
-```text
-mixed-port: 31890
-external-controller: 127.0.0.1:31990
-```
-
-如果只手动改配置文件，也要让 shell 代理端口一致：
-
-```bash
-export MIHOMO_PROXY_PORT=4789
-```
-
-建议把这行放在 `~/.bashrc` 中 source `shell-proxy.sh` 之前。更简单的方式还是重新运行 `bash install.sh --proxy-port 4789`，安装脚本会自动写好 `config.yaml.in` 和 `shell-proxy.sh`。
-
-## 常用命令
-
-更新订阅并重启 Mihomo：
+更新订阅、生成配置并在当前 SSH 会话后台启动 Mihomo：
 
 ```bash
 mihomo_restart
 ```
 
-启动 Mihomo：
-
-```bash
-mihomo_start
-```
-
-停止 Mihomo：
-
-```bash
-mihomo_stop
-```
-
-开启当前 shell、curl、git HTTP、git SSH 代理：
+开启当前 shell 和 git 代理：
 
 ```bash
 proxy_on
 ```
 
-关闭代理：
-
-```bash
-proxy_off
-```
-
-查看代理状态：
-
-```bash
-proxy_status
-```
-
-查看服务状态：
+查看状态：
 
 ```bash
 mihomo_status
+proxy_status
 ```
 
 查看日志：
@@ -151,16 +106,28 @@ mihomo_status
 mihomo_logs
 ```
 
-## 选择节点
+停止 Mihomo：
 
-按订阅原始顺序列出并选择节点：
+```bash
+mihomo_stop
+```
+
+前台运行调试：
+
+```bash
+mihomo_run
+```
+
+## 节点
+
+按原始顺序选择节点：
 
 ```bash
 mihomo_pick
 mihomo_pick 8
 ```
 
-测试节点延迟，默认仍按订阅原始顺序显示，编号稳定：
+测试节点延迟，默认仍按原始顺序显示，编号稳定：
 
 ```bash
 mihomo_test
@@ -172,62 +139,35 @@ mihomo_test
 mihomo_test --sort
 ```
 
-测速后自动选择最快可用节点：
+自动选择最快节点：
 
 ```bash
 mihomo_test --best
 ```
 
-测速后按屏幕显示编号选择：
+按屏幕显示编号选择：
 
 ```bash
-mihomo_test --pick
 mihomo_test --pick 8
 ```
 
-## 启动服务
+## 常见问题
 
-如果已经设置了订阅：
+### `mihomo path is not a regular file`
 
-```bash
-mihomo_restart
-mihomo_status
-```
-
-安装脚本会尝试执行：
+说明 `~/.local/bin/mihomo` 是目录或其它非普通文件。修复：
 
 ```bash
-systemctl --user enable mihomo
+ls -ld ~/.local/bin/mihomo
+mv ~/.local/bin/mihomo ~/.local/bin/mihomo_dir_backup
+# 重新把真正的 mihomo 二进制放到 ~/.local/bin/mihomo
+chmod +x ~/.local/bin/mihomo
+~/.local/bin/mihomo -v
 ```
 
-如果安装时看到：
+### `Permission denied` 或 `Exit 126`
 
-```text
-Failed to connect to bus: No medium found
-```
-
-或新版安装脚本提示 `systemd --user is unavailable in this SSH session`，说明当前 SSH 会话没有可用的 user systemd bus。配置文件和命令已经安装成功，helper 会使用 `nohup` fallback 启动 Mihomo。
-
-这种情况下仍然可以直接使用：
-
-```bash
-source ~/.bashrc
-mihomo_restart
-```
-
-新版 helper 会自动退回到 `nohup` 后台启动，PID 文件在：
-
-```text
-~/.config/mihomo/mihomo.pid
-```
-
-日志在：
-
-```text
-~/.config/mihomo/mihomo.log
-```
-
-如果看到 `Exit 126`，通常表示 `~/.local/bin/mihomo` 不能执行。检查：
+通常是没有执行权限、文件系统禁止执行，或二进制架构不匹配：
 
 ```bash
 ls -l ~/.local/bin/mihomo
@@ -237,17 +177,12 @@ chmod +x ~/.local/bin/mihomo
 tail -n 40 ~/.config/mihomo/mihomo.log
 ```
 
-常见原因是没有执行权限、下载了错误 CPU 架构的 Mihomo 二进制，或者目录所在文件系统禁止执行。
+### 关闭 SSH 后代理不可用
 
-可以在有 user bus 的会话中执行：
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now mihomo
-```
-
-如果服务器退出 SSH 后用户服务会停，可以按需启用 linger：
+当前设计不强求常驻。重新登录后执行：
 
 ```bash
-sudo loginctl enable-linger "$USER"
+source ~/.bashrc
+mihomo_restart
+proxy_on
 ```

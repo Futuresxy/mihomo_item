@@ -3,15 +3,48 @@ case ":$PATH:" in
   *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
 
+MIHOMO_HOME="${MIHOMO_HOME:-$HOME/.config/mihomo}"
+MIHOMO_BIN="${MIHOMO_BIN:-$HOME/.local/bin/mihomo}"
+MIHOMO_SUBSCRIPTION_FILE="${MIHOMO_SUBSCRIPTION_FILE:-$HOME/.local/bin/subscription.url}"
 MIHOMO_PROXY_PORT="${MIHOMO_PROXY_PORT:-__MIHOMO_PROXY_PORT__}"
-MIHOMO_HTTP_PROXY_PORT="${MIHOMO_HTTP_PROXY_PORT:-$MIHOMO_PROXY_PORT}"
-MIHOMO_SOCKS_PROXY_PORT="${MIHOMO_SOCKS_PROXY_PORT:-$MIHOMO_PROXY_PORT}"
-MIHOMO_HTTP_PROXY_URL="${MIHOMO_HTTP_PROXY_URL:-http://127.0.0.1:${MIHOMO_HTTP_PROXY_PORT}}"
-MIHOMO_SOCKS_PROXY_URL="${MIHOMO_SOCKS_PROXY_URL:-socks5://127.0.0.1:${MIHOMO_SOCKS_PROXY_PORT}}"
+MIHOMO_CONTROLLER_PORT="${MIHOMO_CONTROLLER_PORT:-__MIHOMO_CONTROLLER_PORT__}"
+MIHOMO_HTTP_PROXY_URL="${MIHOMO_HTTP_PROXY_URL:-http://127.0.0.1:${MIHOMO_PROXY_PORT}}"
+MIHOMO_SOCKS_PROXY_URL="${MIHOMO_SOCKS_PROXY_URL:-socks5://127.0.0.1:${MIHOMO_PROXY_PORT}}"
 MIHOMO_NO_PROXY="${MIHOMO_NO_PROXY:-127.0.0.1,localhost,::1}"
+MIHOMO_PID_FILE="${MIHOMO_PID_FILE:-$MIHOMO_HOME/mihomo.pid}"
+MIHOMO_LOG_FILE="${MIHOMO_LOG_FILE:-$MIHOMO_HOME/mihomo.log}"
 
 _mihomo_git_ssh_command() {
-  printf 'ssh -o ProxyCommand="ncat -v --proxy 127.0.0.1:%s --proxy-type socks5 %%h %%p"' "$MIHOMO_SOCKS_PROXY_PORT"
+  printf 'ssh -o ProxyCommand="ncat -v --proxy 127.0.0.1:%s --proxy-type socks5 %%h %%p"' "$MIHOMO_PROXY_PORT"
+}
+
+_mihomo_check_binary() {
+  if [ ! -e "$MIHOMO_BIN" ]; then
+    echo "mihomo binary not found: $MIHOMO_BIN" >&2
+    echo "Put the mihomo executable at this exact path, then run: chmod +x $MIHOMO_BIN" >&2
+    return 1
+  fi
+  if [ ! -f "$MIHOMO_BIN" ]; then
+    echo "mihomo path is not a regular file: $MIHOMO_BIN" >&2
+    if [ -d "$MIHOMO_BIN" ]; then
+      echo "It is a directory. Move that directory away and put the actual executable here." >&2
+      ls -la "$MIHOMO_BIN" >&2
+    fi
+    return 1
+  fi
+  if [ ! -x "$MIHOMO_BIN" ]; then
+    echo "mihomo binary is not executable: $MIHOMO_BIN" >&2
+    echo "Fix it with: chmod +x $MIHOMO_BIN" >&2
+    return 1
+  fi
+}
+
+_mihomo_running() {
+  local pid
+  [ -f "$MIHOMO_PID_FILE" ] || return 1
+  pid="$(cat "$MIHOMO_PID_FILE" 2>/dev/null || true)"
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" >/dev/null 2>&1
 }
 
 proxy_on() {
@@ -47,4 +80,122 @@ proxy_status() {
   printf 'git core.sshCommand=%s\n' "$(git config --global --get core.sshCommand || printf '<unset>')"
   printf 'git http.proxy=%s\n' "$(git config --global --get http.proxy || printf '<unset>')"
   printf 'git https.proxy=%s\n' "$(git config --global --get https.proxy || printf '<unset>')"
+}
+
+mihomo_start() {
+  _mihomo_check_binary || return
+  mkdir -p "$MIHOMO_HOME"
+  if _mihomo_running; then
+    echo "mihomo is already running with pid $(cat "$MIHOMO_PID_FILE")"
+    return 0
+  fi
+  "$MIHOMO_BIN" -d "$MIHOMO_HOME" -f "$MIHOMO_HOME/config.yaml" > "$MIHOMO_LOG_FILE" 2>&1 &
+  echo "$!" > "$MIHOMO_PID_FILE"
+  echo "Started mihomo in this SSH session, pid $!"
+  echo "Log: $MIHOMO_LOG_FILE"
+  sleep 1
+  if ! _mihomo_running; then
+    rm -f "$MIHOMO_PID_FILE"
+    echo "mihomo exited immediately. Last log lines:" >&2
+    tail -n 40 "$MIHOMO_LOG_FILE" >&2
+    return 1
+  fi
+}
+
+mihomo_stop() {
+  local pid
+  if ! _mihomo_running; then
+    rm -f "$MIHOMO_PID_FILE"
+    echo "mihomo is not running"
+    return 0
+  fi
+  pid="$(cat "$MIHOMO_PID_FILE")"
+  kill "$pid"
+  rm -f "$MIHOMO_PID_FILE"
+  echo "Stopped mihomo pid $pid"
+}
+
+mihomo_restart() {
+  "$HOME/.local/bin/mihomo-gen-config" || return
+  mihomo_stop >/dev/null 2>&1 || true
+  mihomo_start
+}
+
+mihomo_run() {
+  "$HOME/.local/bin/mihomo-gen-config" || return
+  _mihomo_check_binary || return
+  "$MIHOMO_BIN" -d "$MIHOMO_HOME" -f "$MIHOMO_HOME/config.yaml"
+}
+
+mihomo_status() {
+  if _mihomo_running; then
+    echo "mihomo is running with pid $(cat "$MIHOMO_PID_FILE")"
+  else
+    echo "mihomo is not running"
+  fi
+  echo "Config: $MIHOMO_HOME/config.yaml"
+  echo "Proxy:  http://127.0.0.1:$MIHOMO_PROXY_PORT"
+  echo "Socks:  socks5://127.0.0.1:$MIHOMO_PROXY_PORT"
+  echo "API:    http://127.0.0.1:$MIHOMO_CONTROLLER_PORT"
+  echo "Log:    $MIHOMO_LOG_FILE"
+}
+
+mihomo_logs() {
+  if [ -f "$MIHOMO_LOG_FILE" ]; then
+    tail -f "$MIHOMO_LOG_FILE"
+  else
+    echo "No mihomo log found at $MIHOMO_LOG_FILE"
+  fi
+}
+
+mihomo_pick() {
+  "$HOME/.local/bin/mihomo-pick-node" "${1:-}"
+}
+
+mihomo_test() {
+  "$HOME/.local/bin/mihomo-test-nodes" "$@"
+}
+
+mihomo_set_sub() {
+  if [ $# -ne 1 ]; then
+    echo "usage: mihomo_set_sub '<subscription_url>'"
+    return 1
+  fi
+  local normalized_url
+  normalized_url="$(python3 - "$1" <<'PY'
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+import sys
+
+raw = sys.argv[1].strip()
+parts = urlsplit(raw)
+query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "flag"]
+query.append(("flag", "clash.meta"))
+print(urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)))
+PY
+)"
+  mkdir -p "$HOME/.local/bin"
+  printf '%s\n' "$normalized_url" > "$MIHOMO_SUBSCRIPTION_FILE"
+  chmod 600 "$MIHOMO_SUBSCRIPTION_FILE"
+  mihomo_restart
+}
+
+mihomo_help() {
+  cat <<'EOF'
+mihomo quick usage:
+  mihomo_set_sub '<url>'  # save subscription, update config, restart mihomo
+  mihomo_restart          # update subscription and restart mihomo in this SSH session
+  mihomo_start            # start mihomo in this SSH session
+  mihomo_stop             # stop mihomo started by mihomo_start/restart
+  mihomo_run              # run mihomo in foreground for debugging
+  mihomo_status           # show process and ports
+  mihomo_logs             # follow log
+  proxy_on                # enable shell/git proxy
+  proxy_off               # disable shell/git proxy
+  proxy_status            # show shell/git proxy status
+  mihomo_test             # test nodes in original order
+  mihomo_test --sort      # test nodes and sort by latency
+  mihomo_test --best      # test and select fastest node
+  mihomo_test --pick 8    # test and select displayed index
+  mihomo_pick 8           # select node by original index without testing
+EOF
 }
