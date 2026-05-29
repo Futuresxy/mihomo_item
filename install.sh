@@ -301,14 +301,19 @@ if systemctl --user show-environment >/dev/null 2>&1; then
   echo "Enabled mihomo user service."
 else
   cat <<EOF
-Skipped systemd --user setup: user systemd bus is unavailable.
-This is common on SSH-only servers, containers, or users without linger.
+systemd --user is unavailable in this SSH session, so install will use the built-in nohup fallback.
+This is OK on SSH-only servers, containers, or users without linger.
 
-After logging in with a normal user session, run:
-  systemctl --user daemon-reload
-  systemctl --user enable --now mihomo
+After setting your subscription, run:
+  source ~/.bashrc
+  mihomo_restart
+  proxy_on
 
-If the service stops after SSH logout, ask an admin or run:
+The fallback writes:
+  PID: $HOME/.config/mihomo/mihomo.pid
+  Log: $HOME/.config/mihomo/mihomo.log
+
+Optional: if you want systemd --user instead, ask an admin or run:
   sudo loginctl enable-linger "$USER"
 EOF
 fi

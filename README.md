@@ -208,7 +208,7 @@ systemctl --user enable mihomo
 Failed to connect to bus: No medium found
 ```
 
-或新版安装脚本提示 `Skipped systemd --user setup`，说明当前 SSH 会话没有可用的 user systemd bus。配置文件和命令已经安装成功，但服务没有被 systemd 启用。
+或新版安装脚本提示 `systemd --user is unavailable in this SSH session`，说明当前 SSH 会话没有可用的 user systemd bus。配置文件和命令已经安装成功，helper 会使用 `nohup` fallback 启动 Mihomo。
 
 这种情况下仍然可以直接使用：
 
