@@ -40,11 +40,29 @@ _mihomo_check_binary() {
 }
 
 _mihomo_running() {
-  local pid
+  local pid state
   [ -f "$MIHOMO_PID_FILE" ] || return 1
   pid="$(cat "$MIHOMO_PID_FILE" 2>/dev/null || true)"
   [ -n "$pid" ] || return 1
   kill -0 "$pid" >/dev/null 2>&1
+  state="$(ps -p "$pid" -o stat= 2>/dev/null | awk '{print $1}')"
+  case "$state" in
+    Z*) return 1 ;;
+  esac
+}
+
+_mihomo_api_ready() {
+  python3 - "$MIHOMO_CONTROLLER_PORT" <<'PY'
+import sys
+from urllib.request import urlopen
+
+port = sys.argv[1]
+try:
+    with urlopen(f"http://127.0.0.1:{port}/proxies/PROXY", timeout=1) as resp:
+        raise SystemExit(0 if resp.status == 200 else 1)
+except Exception:
+    raise SystemExit(1)
+PY
 }
 
 proxy_on() {
@@ -93,13 +111,22 @@ mihomo_start() {
   echo "$!" > "$MIHOMO_PID_FILE"
   echo "Started mihomo in this SSH session, pid $!"
   echo "Log: $MIHOMO_LOG_FILE"
-  sleep 1
+  for _ in 1 2 3 4 5; do
+    if _mihomo_running && _mihomo_api_ready; then
+      return 0
+    fi
+    sleep 1
+  done
   if ! _mihomo_running; then
     rm -f "$MIHOMO_PID_FILE"
     echo "mihomo exited immediately. Last log lines:" >&2
     tail -n 40 "$MIHOMO_LOG_FILE" >&2
     return 1
   fi
+  echo "mihomo process is running, but controller API is not ready yet." >&2
+  echo "Last log lines:" >&2
+  tail -n 40 "$MIHOMO_LOG_FILE" >&2
+  return 1
 }
 
 mihomo_stop() {
@@ -185,9 +212,24 @@ PY
   mihomo_restart
 }
 
+mihomo_up() {
+  if [ $# -eq 1 ]; then
+    mihomo_set_sub "$1" || return
+  elif [ $# -eq 0 ]; then
+    mihomo_restart || return
+  else
+    echo "usage: mihomo_up ['<subscription_url>']"
+    return 1
+  fi
+  proxy_on
+  mihomo_status
+}
+
 mihomo_help() {
   cat <<'EOF'
 mihomo quick usage:
+  mihomo_up '<url>'       # save subscription, start mihomo, enable proxy
+  mihomo_up               # update current subscription, start mihomo, enable proxy
   mihomo_set_sub '<url>'  # save subscription, update config, restart mihomo
   mihomo_restart          # update subscription and restart mihomo in this SSH session
   mihomo_use_existing_provider

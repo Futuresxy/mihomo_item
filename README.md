@@ -9,6 +9,7 @@
 - 不依赖 `systemd --user`
 - 不使用 `nohup` 常驻；关闭 SSH 后如果进程退出，下次重新 `mihomo_restart` 即可
 - 不使用 GEOIP 规则，避免新服务器启动时下载 MMDB 失败
+- 自动过滤订阅里的“剩余流量/套餐到期”等伪节点
 
 本仓库不包含订阅 token、节点 provider、cache 或个人密钥。
 
@@ -75,17 +76,17 @@ bash install.sh --proxy-port 4789 --auto-port
 或者用命令写入：
 
 ```bash
-mihomo_set_sub '你的订阅地址'
+mihomo_up '你的订阅地址'
 ```
 
-脚本会自动使用 `flag=clash.meta`，不用手动加。
+脚本会自动使用 `flag=clash.meta`，不用手动加。`mihomo_up '<url>'` 会写订阅、下载节点、启动 Mihomo，并执行 `proxy_on`。
 
 ## 启动
 
 更新订阅、生成配置并在当前 SSH 会话后台启动 Mihomo：
 
 ```bash
-mihomo_restart
+mihomo_up
 ```
 
 开启当前 shell 和 git 代理：

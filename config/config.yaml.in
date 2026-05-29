@@ -13,10 +13,12 @@ proxy-providers:
   subscription:
     type: file
     path: ./providers/subscription.yaml
+    exclude-filter: "剩余|流量|套餐|到期|过期|官网|网站|Traffic|Expire|Remain"
     health-check:
       enable: true
       url: https://www.gstatic.com/generate_204
       interval: 300
+      timeout: 5000
 
 proxy-groups:
   - name: PROXY
@@ -25,6 +27,7 @@ proxy-groups:
       - subscription
     url: https://www.gstatic.com/generate_204
     interval: 300
+    timeout: 5000
     tolerance: 50
 
 rules:
