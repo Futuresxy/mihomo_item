@@ -109,6 +109,18 @@ export MIHOMO_PROXY_PORT=4789
 mihomo_restart
 ```
 
+启动 Mihomo：
+
+```bash
+mihomo_start
+```
+
+停止 Mihomo：
+
+```bash
+mihomo_stop
+```
+
 开启当前 shell、curl、git HTTP、git SSH 代理：
 
 ```bash
@@ -179,7 +191,7 @@ mihomo_test --pick 8
 
 ```bash
 mihomo_restart
-systemctl --user status mihomo --no-pager
+mihomo_status
 ```
 
 安装脚本会尝试执行：
@@ -195,6 +207,25 @@ Failed to connect to bus: No medium found
 ```
 
 或新版安装脚本提示 `Skipped systemd --user setup`，说明当前 SSH 会话没有可用的 user systemd bus。配置文件和命令已经安装成功，但服务没有被 systemd 启用。
+
+这种情况下仍然可以直接使用：
+
+```bash
+source ~/.bashrc
+mihomo_restart
+```
+
+新版 helper 会自动退回到 `nohup` 后台启动，PID 文件在：
+
+```text
+~/.config/mihomo/mihomo.pid
+```
+
+日志在：
+
+```text
+~/.config/mihomo/mihomo.log
+```
 
 可以在有 user bus 的会话中执行：
 

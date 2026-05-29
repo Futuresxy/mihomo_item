@@ -124,21 +124,74 @@ _mihomo_user_systemd_available() {
   systemctl --user show-environment >/dev/null 2>&1
 }
 
+_mihomo_pid_file() {
+  printf '%s\n' "$HOME/.config/mihomo/mihomo.pid"
+}
+
+_mihomo_is_running() {
+  local pid_file pid
+  pid_file="$(_mihomo_pid_file)"
+  [ -f "$pid_file" ] || return 1
+  pid="$(cat "$pid_file" 2>/dev/null || true)"
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+mihomo_start() {
+  if _mihomo_user_systemd_available; then
+    systemctl --user start mihomo
+    return
+  fi
+  if _mihomo_is_running; then
+    echo "mihomo is already running with pid $(cat "$(_mihomo_pid_file)")"
+    return 0
+  fi
+  mkdir -p "$HOME/.config/mihomo"
+  nohup "$HOME/.local/bin/mihomo" \
+    -d "$HOME/.config/mihomo" \
+    -f "$HOME/.config/mihomo/config.yaml" \
+    > "$HOME/.config/mihomo/mihomo.log" 2>&1 &
+  echo "$!" > "$(_mihomo_pid_file)"
+  echo "Started mihomo without systemd, pid $!"
+  echo "Log: $HOME/.config/mihomo/mihomo.log"
+}
+
+mihomo_stop() {
+  if _mihomo_user_systemd_available; then
+    systemctl --user stop mihomo
+    return
+  fi
+  local pid_file pid
+  pid_file="$(_mihomo_pid_file)"
+  if ! _mihomo_is_running; then
+    echo "mihomo is not running from $pid_file"
+    return 0
+  fi
+  pid="$(cat "$pid_file")"
+  kill "$pid"
+  rm -f "$pid_file"
+  echo "Stopped mihomo pid $pid"
+}
+
 mihomo_status() {
   if _mihomo_user_systemd_available; then
     systemctl --user status mihomo --no-pager
+  elif _mihomo_is_running; then
+    echo "mihomo is running without systemd, pid $(cat "$(_mihomo_pid_file)")"
+    echo "Log: $HOME/.config/mihomo/mihomo.log"
   else
     echo "systemd --user is unavailable in this session."
-    echo "Manual check: pgrep -af mihomo"
+    echo "mihomo is not running from $(_mihomo_pid_file)"
   fi
 }
 
 mihomo_logs() {
   if _mihomo_user_systemd_available; then
     journalctl --user -u mihomo -f
+  elif [ -f "$HOME/.config/mihomo/mihomo.log" ]; then
+    tail -f "$HOME/.config/mihomo/mihomo.log"
   else
-    echo "systemd --user is unavailable in this session."
-    echo "Start Mihomo manually or enable user linger before using journalctl --user."
+    echo "No mihomo log found at $HOME/.config/mihomo/mihomo.log"
   fi
 }
 
@@ -147,10 +200,8 @@ mihomo_restart() {
   if _mihomo_user_systemd_available; then
     systemctl --user restart mihomo
   else
-    echo "systemd --user is unavailable; config was generated but service was not restarted." >&2
-    echo "Manual start command:" >&2
-    echo "  nohup \"$HOME/.local/bin/mihomo\" -d \"$HOME/.config/mihomo\" -f \"$HOME/.config/mihomo/config.yaml\" > \"$HOME/.config/mihomo/mihomo.log\" 2>&1 &" >&2
-    return 1
+    mihomo_stop >/dev/null 2>&1 || true
+    mihomo_start
   fi
 }
 
@@ -186,10 +237,8 @@ PY
   if _mihomo_user_systemd_available; then
     systemctl --user restart mihomo
   else
-    echo "systemd --user is unavailable; subscription was saved and config was generated, but service was not restarted." >&2
-    echo "Manual start command:" >&2
-    echo "  nohup \"$HOME/.local/bin/mihomo\" -d \"$HOME/.config/mihomo\" -f \"$HOME/.config/mihomo/config.yaml\" > \"$HOME/.config/mihomo/mihomo.log\" 2>&1 &" >&2
-    return 1
+    mihomo_stop >/dev/null 2>&1 || true
+    mihomo_start
   fi
 }
 # <<< mihomo helper commands <<<
