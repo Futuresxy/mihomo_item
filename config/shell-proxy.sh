@@ -3,8 +3,9 @@ case ":$PATH:" in
   *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
 
-MIHOMO_HTTP_PROXY_PORT="${MIHOMO_HTTP_PROXY_PORT:-31890}"
-MIHOMO_SOCKS_PROXY_PORT="${MIHOMO_SOCKS_PROXY_PORT:-31891}"
+MIHOMO_PROXY_PORT="${MIHOMO_PROXY_PORT:-__MIHOMO_PROXY_PORT__}"
+MIHOMO_HTTP_PROXY_PORT="${MIHOMO_HTTP_PROXY_PORT:-$MIHOMO_PROXY_PORT}"
+MIHOMO_SOCKS_PROXY_PORT="${MIHOMO_SOCKS_PROXY_PORT:-$MIHOMO_PROXY_PORT}"
 MIHOMO_HTTP_PROXY_URL="${MIHOMO_HTTP_PROXY_URL:-http://127.0.0.1:${MIHOMO_HTTP_PROXY_PORT}}"
 MIHOMO_SOCKS_PROXY_URL="${MIHOMO_SOCKS_PROXY_URL:-socks5://127.0.0.1:${MIHOMO_SOCKS_PROXY_PORT}}"
 MIHOMO_NO_PROXY="${MIHOMO_NO_PROXY:-127.0.0.1,localhost,::1}"
@@ -47,4 +48,3 @@ proxy_status() {
   printf 'git http.proxy=%s\n' "$(git config --global --get http.proxy || printf '<unset>')"
   printf 'git https.proxy=%s\n' "$(git config --global --get https.proxy || printf '<unset>')"
 }
-

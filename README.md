@@ -39,6 +39,22 @@ bash install.sh
 source ~/.bashrc
 ```
 
+如果你希望使用自定义本地代理端口，例如 `4789`：
+
+```bash
+bash install.sh --proxy-port 4789
+source ~/.bashrc
+```
+
+`--proxy-port` 配置的是 Mihomo `mixed-port`，同一个端口同时支持 HTTP 和 SOCKS。因此 `proxy_on` 会设置：
+
+```text
+http_proxy=http://127.0.0.1:4789
+https_proxy=http://127.0.0.1:4789
+all_proxy=socks5://127.0.0.1:4789
+git SSH ProxyCommand -> 127.0.0.1:4789
+```
+
 ## 必须修改哪里
 
 必须修改订阅地址：
@@ -57,7 +73,14 @@ mihomo_set_sub '你的订阅地址'
 
 ## 可能需要修改哪里
 
-如果端口冲突，修改：
+如果端口冲突，推荐重新运行安装脚本指定端口：
+
+```bash
+bash install.sh --proxy-port 4789
+source ~/.bashrc
+```
+
+或者手动修改：
 
 ```bash
 ~/.config/mihomo/config.yaml.in
@@ -67,18 +90,16 @@ mihomo_set_sub '你的订阅地址'
 
 ```text
 mixed-port: 31890
-socks-port: 31891
 external-controller: 127.0.0.1:31990
 ```
 
-如果改了代理端口，也要在 shell 中对应设置：
+如果只手动改配置文件，也要让 shell 代理端口一致：
 
 ```bash
-export MIHOMO_HTTP_PROXY_PORT=31890
-export MIHOMO_SOCKS_PROXY_PORT=31891
+export MIHOMO_PROXY_PORT=4789
 ```
 
-建议把这两行放在 `~/.bashrc` 中 source `shell-proxy.sh` 之前。
+建议把这行放在 `~/.bashrc` 中 source `shell-proxy.sh` 之前。更简单的方式还是重新运行 `bash install.sh --proxy-port 4789`，安装脚本会自动写好 `config.yaml.in` 和 `shell-proxy.sh`。
 
 ## 常用命令
 
@@ -161,10 +182,25 @@ mihomo_restart
 systemctl --user status mihomo --no-pager
 ```
 
-开机自启由安装脚本执行：
+安装脚本会尝试执行：
 
 ```bash
 systemctl --user enable mihomo
+```
+
+如果安装时看到：
+
+```text
+Failed to connect to bus: No medium found
+```
+
+或新版安装脚本提示 `Skipped systemd --user setup`，说明当前 SSH 会话没有可用的 user systemd bus。配置文件和命令已经安装成功，但服务没有被 systemd 启用。
+
+可以在有 user bus 的会话中执行：
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now mihomo
 ```
 
 如果服务器退出 SSH 后用户服务会停，可以按需启用 linger：
@@ -172,4 +208,3 @@ systemctl --user enable mihomo
 ```bash
 sudo loginctl enable-linger "$USER"
 ```
-

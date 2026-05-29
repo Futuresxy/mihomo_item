@@ -1,10 +1,9 @@
-mixed-port: 31890
-socks-port: 31891
+mixed-port: __MIHOMO_PROXY_PORT__
 allow-lan: false
 mode: rule
 log-level: info
 ipv6: true
-external-controller: 127.0.0.1:31990
+external-controller: 127.0.0.1:__MIHOMO_CONTROLLER_PORT__
 
 profile:
   store-selected: true
@@ -35,4 +34,3 @@ rules:
   - GEOIP,lan,DIRECT,no-resolve
   - GEOIP,CN,DIRECT
   - MATCH,PROXY
-
