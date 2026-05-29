@@ -182,7 +182,15 @@ mihomo_logs() {
 }
 
 mihomo_pick() {
-  "$HOME/.local/bin/mihomo-pick-node" "${1:-}"
+  "$HOME/.local/bin/mihomo-pick-node" "$@"
+}
+
+mihomo_pick_node() {
+  mihomo_pick "$@"
+}
+
+mihomo_node_pick() {
+  mihomo_pick "$@"
 }
 
 mihomo_test() {
@@ -247,5 +255,7 @@ mihomo quick usage:
   mihomo_test --best      # test and select fastest node
   mihomo_test --pick 8    # test and select displayed index
   mihomo_pick 8           # select node by original index without testing
+  mihomo_pick_node 8      # same as mihomo_pick 8
+  mihomo_node_pick 8      # same as mihomo_pick 8
 EOF
 }

@@ -2,7 +2,77 @@
 set -euo pipefail
 
 group="${MIHOMO_GROUP:-PROXY}"
-index_arg="${1:-}"
+index_arg=""
+api_arg="${MIHOMO_API:-}"
+
+usage() {
+  cat <<'EOF'
+Usage: mihomo-pick-node [--group GROUP] [--api URL] [index]
+
+Select a Mihomo node by the original provider order.
+
+Examples:
+  mihomo-pick-node
+  mihomo-pick-node 8
+  mihomo-pick-node --group PROXY 8
+
+Options:
+  --group GROUP   Proxy group name, default: PROXY
+  --api URL       Mihomo controller URL, default: read from config.yaml
+  -h, --help      Show this help.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --group)
+      [ "$#" -ge 2 ] || { echo "Missing value for --group" >&2; exit 2; }
+      group="$2"
+      shift 2
+      ;;
+    --api)
+      [ "$#" -ge 2 ] || { echo "Missing value for --api" >&2; exit 2; }
+      api_arg="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$index_arg" ]]; then
+        echo "Only one index is allowed." >&2
+        usage >&2
+        exit 2
+      fi
+      index_arg="$1"
+      shift
+      ;;
+  esac
+done
+
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -gt 1 ]; then
+    echo "Only one index is allowed." >&2
+    usage >&2
+    exit 2
+  fi
+  if [[ -n "$index_arg" ]]; then
+    echo "Only one index is allowed." >&2
+    usage >&2
+    exit 2
+  fi
+  index_arg="$1"
+fi
 
 detect_api() {
   local cfg controller
@@ -19,16 +89,26 @@ detect_api() {
   printf 'http://127.0.0.1:31990\n'
 }
 
-api="${MIHOMO_API:-$(detect_api)}"
+api="${api_arg:-$(detect_api)}"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
-curl -fsSL "${api}/proxies/${group}" -o "$tmp"
+encoded_group="$(
+  python3 - "$group" <<'PY'
+from urllib.parse import quote
+import sys
+
+print(quote(sys.argv[1], safe=""))
+PY
+)"
+
+curl -fsSL "${api}/proxies/${encoded_group}" -o "$tmp"
 
 python3 - "$tmp" "$api" "$group" "$index_arg" <<'PY'
 import json
 import subprocess
 import sys
+from urllib.parse import quote
 
 path = sys.argv[1]
 api = sys.argv[2]
@@ -75,7 +155,7 @@ subprocess.run(
         "-fsSL",
         "-X",
         "PUT",
-        f"{api}/proxies/{group}",
+        f"{api}/proxies/{quote(group, safe='')}",
         "-H",
         "Content-Type: application/json",
         "-d",
@@ -85,4 +165,3 @@ subprocess.run(
 )
 print(f"Selected node: {selected}")
 PY
-

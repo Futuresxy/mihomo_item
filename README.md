@@ -312,6 +312,16 @@ mihomo_test --pick 8
 ```bash
 mihomo_pick
 mihomo_pick 8
+mihomo_pick_node 8
+mihomo_node_pick 8
+```
+
+`mihomo_pick_node` 和 `mihomo_node_pick` 都是 `mihomo_pick` 的同义函数，方便记忆。
+
+如果你的代理组不是默认的 `PROXY`，可以指定组名：
+
+```bash
+mihomo_pick --group PROXY 8
 ```
 
 配置模板会过滤常见信息节点，例如“剩余流量”“套餐到期”。如果仍然选到了不可用节点，先执行：
