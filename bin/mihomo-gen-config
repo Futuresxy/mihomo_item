@@ -6,6 +6,35 @@ subscription_file="$HOME/.local/bin/subscription.url"
 provider_path="${MIHOMO_PROVIDER_FILE:-$confdir/providers/subscription.yaml}"
 template_file="${MIHOMO_TEMPLATE_FILE:-$confdir/config.yaml.in}"
 config_file="${MIHOMO_CONFIG_FILE:-$confdir/config.yaml}"
+skip_download=0
+
+usage() {
+  cat <<'EOF'
+Usage: mihomo-gen-config [--skip-download]
+
+Options:
+  --skip-download   Use existing providers/subscription.yaml and only generate config.yaml
+  -h, --help        Show this help.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --skip-download)
+      skip_download=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
 
 mkdir -p "$confdir/providers"
 chmod 700 "$confdir" "$confdir/providers" 2>/dev/null || true
@@ -22,7 +51,8 @@ if [ -z "$url" ]; then
   exit 1
 fi
 
-download_url=$(python3 - "$url" <<'PY'
+if [ "$skip_download" -eq 0 ]; then
+  download_url=$(python3 - "$url" <<'PY'
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import sys
 
@@ -32,23 +62,34 @@ query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k 
 query.append(("flag", "clash.meta"))
 print(urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)))
 PY
-)
+  )
 
-echo "Downloading subscription via curl (flag=clash.meta)."
-if curl -k -fsSL \
-  -A "ClashMeta; ClashVerge/1.5.11; Mihomo/1.18.3" \
-  -o "$provider_path" \
-  "$download_url"; then
-  chmod 600 "$provider_path"
-  if grep -q "^proxies:" "$provider_path"; then
-    echo "Successfully updated providers/subscription.yaml"
+  echo "Downloading subscription via curl (flag=clash.meta)."
+  if curl -k -fsSL \
+    -A "ClashMeta; ClashVerge/1.5.11; Mihomo/1.18.3" \
+    -o "$provider_path" \
+    "$download_url"; then
+    chmod 600 "$provider_path"
+    if grep -q "^proxies:" "$provider_path"; then
+      echo "Successfully updated providers/subscription.yaml"
+    else
+      echo "Error: downloaded content does not seem to contain a proxies section." >&2
+      exit 1
+    fi
   else
-    echo "Error: downloaded content does not seem to contain a proxies section." >&2
+    echo "Error: curl download failed." >&2
     exit 1
   fi
 else
-  echo "Error: curl download failed." >&2
-  exit 1
+  echo "Skipping subscription download; using existing $provider_path"
+  if [ ! -f "$provider_path" ]; then
+    echo "Error: provider file not found: $provider_path" >&2
+    exit 1
+  fi
+  if ! grep -q "^proxies:" "$provider_path"; then
+    echo "Error: existing provider file does not contain a proxies section." >&2
+    exit 1
+  fi
 fi
 
 if [ ! -f "$template_file" ]; then

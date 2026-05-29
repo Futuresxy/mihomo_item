@@ -118,6 +118,17 @@ mihomo_stop
 mihomo_run
 ```
 
+如果新服务器直连订阅站失败，可以从一台能访问订阅的机器上传 provider：
+
+```bash
+mkdir -p ~/.config/mihomo/providers
+# 把可用的 subscription.yaml 上传到 ~/.config/mihomo/providers/subscription.yaml
+mihomo_use_existing_provider
+proxy_on
+```
+
+这种方式会跳过订阅下载，直接使用已有的 `providers/subscription.yaml` 生成配置并启动。
+
 ## 节点
 
 按原始顺序选择节点：

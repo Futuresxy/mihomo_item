@@ -121,6 +121,12 @@ mihomo_restart() {
   mihomo_start
 }
 
+mihomo_use_existing_provider() {
+  "$HOME/.local/bin/mihomo-gen-config" --skip-download || return
+  mihomo_stop >/dev/null 2>&1 || true
+  mihomo_start
+}
+
 mihomo_run() {
   "$HOME/.local/bin/mihomo-gen-config" || return
   _mihomo_check_binary || return
@@ -184,6 +190,8 @@ mihomo_help() {
 mihomo quick usage:
   mihomo_set_sub '<url>'  # save subscription, update config, restart mihomo
   mihomo_restart          # update subscription and restart mihomo in this SSH session
+  mihomo_use_existing_provider
+                          # generate config/start from existing providers/subscription.yaml
   mihomo_start            # start mihomo in this SSH session
   mihomo_stop             # stop mihomo started by mihomo_start/restart
   mihomo_run              # run mihomo in foreground for debugging
