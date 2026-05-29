@@ -2,7 +2,7 @@ mixed-port: __MIHOMO_PROXY_PORT__
 allow-lan: false
 mode: rule
 log-level: info
-ipv6: true
+ipv6: false
 external-controller: 127.0.0.1:__MIHOMO_CONTROLLER_PORT__
 
 profile:
@@ -31,6 +31,4 @@ rules:
   - DOMAIN-SUFFIX,openai.com,PROXY
   - DOMAIN-SUFFIX,ai.com,PROXY
   - DOMAIN-SUFFIX,chatgpt.com,PROXY
-  - GEOIP,lan,DIRECT,no-resolve
-  - GEOIP,CN,DIRECT
   - MATCH,PROXY

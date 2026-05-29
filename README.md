@@ -8,6 +8,7 @@
 - `.bashrc` 只 source 一个文件：`~/.config/mihomo/shell-proxy.sh`
 - 不依赖 `systemd --user`
 - 不使用 `nohup` 常驻；关闭 SSH 后如果进程退出，下次重新 `mihomo_restart` 即可
+- 不使用 GEOIP 规则，避免新服务器启动时下载 MMDB 失败
 
 本仓库不包含订阅 token、节点 provider、cache 或个人密钥。
 
