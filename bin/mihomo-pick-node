@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+group="${MIHOMO_GROUP:-PROXY}"
+index_arg="${1:-}"
+
+detect_api() {
+  local cfg controller
+  cfg="${MIHOMO_CONFIG:-$HOME/.config/mihomo/config.yaml}"
+  if [[ -f "$cfg" ]]; then
+    controller="$(awk '/^[[:space:]]*external-controller:[[:space:]]*/ {print $2; exit}' "$cfg")"
+    controller="${controller//\"/}"
+    controller="${controller//\'/}"
+    if [[ -n "$controller" ]]; then
+      printf 'http://%s\n' "$controller"
+      return 0
+    fi
+  fi
+  printf 'http://127.0.0.1:31990\n'
+}
+
+api="${MIHOMO_API:-$(detect_api)}"
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+curl -fsSL "${api}/proxies/${group}" -o "$tmp"
+
+python3 - "$tmp" "$api" "$group" "$index_arg" <<'PY'
+import json
+import subprocess
+import sys
+
+path = sys.argv[1]
+api = sys.argv[2]
+group = sys.argv[3]
+index_arg = sys.argv[4]
+
+with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+choices = data.get("all", [])
+if not choices:
+    print("No nodes returned by Mihomo.", file=sys.stderr)
+    sys.exit(1)
+
+current = data.get("now", "")
+print(f"Current group: {group}")
+print(f"Current node: {current}")
+for i, name in enumerate(choices):
+    marker = "*" if name == current else " "
+    print(f"[{i:>2}]{marker} {name}")
+
+if index_arg:
+    index = index_arg.strip()
+else:
+    if not sys.stdin.isatty():
+        print("No TTY input. Use: mihomo-pick-node <index>", file=sys.stderr)
+        sys.exit(2)
+    index = input("Select index: ").strip()
+
+if not index.isdigit():
+    print("Index must be a number.", file=sys.stderr)
+    sys.exit(1)
+
+idx = int(index)
+if idx < 0 or idx >= len(choices):
+    print(f"Index out of range: {idx}", file=sys.stderr)
+    sys.exit(1)
+
+selected = choices[idx]
+payload = json.dumps({"name": selected})
+subprocess.run(
+    [
+        "curl",
+        "-fsSL",
+        "-X",
+        "PUT",
+        f"{api}/proxies/{group}",
+        "-H",
+        "Content-Type: application/json",
+        "-d",
+        payload,
+    ],
+    check=True,
+)
+print(f"Selected node: {selected}")
+PY
+

@@ -1,0 +1,9 @@
+cache.db
+*.db
+*.log
+__pycache__/
+providers/
+subscription.url
+config.yaml
+*.backup
+*.mihomo-backup-*

@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+
+
+DEFAULT_URL = "https://www.gstatic.com/generate_204"
+DEFAULT_TIMEOUT_MS = 5000
+INFO_PREFIXES = (
+    "剩余流量",
+    "套餐到期",
+    "过期时间",
+    "官网",
+    "网站",
+    "流量",
+    "到期",
+)
+
+
+def is_info_node(name: str) -> bool:
+    return name.strip().startswith(INFO_PREFIXES)
+
+
+def detect_api() -> str:
+    cfg = Path.home() / ".config/mihomo/config.yaml"
+    if cfg.exists():
+        for line in cfg.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("external-controller:"):
+                controller = stripped.split(":", 1)[1].strip().strip("'\"")
+                if controller:
+                    return f"http://{controller}"
+    return "http://127.0.0.1:31990"
+
+
+def api_json(api: str, path: str, *, method: str = "GET", payload=None):
+    data = None
+    headers = {}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = Request(f"{api}{path}", data=data, headers=headers, method=method)
+    with urlopen(req, timeout=10) as resp:
+        body = resp.read().decode("utf-8")
+        if not body.strip():
+            return {}
+        return json.loads(body)
+
+
+def test_node(api: str, name: str, test_url: str, timeout_ms: int):
+    start = time.monotonic()
+    path = (
+        f"/proxies/{quote(name, safe='')}/delay"
+        f"?timeout={timeout_ms}&url={quote(test_url, safe='')}"
+    )
+    try:
+        data = api_json(api, path)
+        delay = data.get("delay")
+        if isinstance(delay, int) and delay >= 0:
+            return {"name": name, "delay": delay, "error": ""}
+        return {"name": name, "delay": None, "error": json.dumps(data, ensure_ascii=False)}
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")[:120]
+        return {"name": name, "delay": None, "error": f"HTTP {exc.code}: {body}"}
+    except (TimeoutError, URLError, OSError) as exc:
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        return {"name": name, "delay": None, "error": f"{type(exc).__name__} after {elapsed_ms}ms"}
+
+
+def sorted_results(results):
+    return sorted(
+        results,
+        key=lambda item: (
+            item["delay"] is None,
+            item["delay"] if item["delay"] is not None else 10**9,
+            item["name"],
+        ),
+    )
+
+
+def original_order_results(results, nodes):
+    by_name = {item["name"]: item for item in results}
+    return [by_name[name] for name in nodes if name in by_name]
+
+
+def print_results(results, current: str):
+    print(f"{'idx':>3}  {'delay':>8}  node")
+    print(f"{'-' * 3}  {'-' * 8}  {'-' * 40}")
+    for idx, item in enumerate(results):
+        marker = "*" if item["name"] == current else " "
+        delay = f"{item['delay']} ms" if item["delay"] is not None else "FAILED"
+        print(f"{idx:>3}{marker} {delay:>8}  {item['name']}")
+    print()
+    print("* marks the current selected node.")
+
+
+def choose_node(api: str, group: str, name: str):
+    api_json(api, f"/proxies/{quote(group, safe='')}", method="PUT", payload={"name": name})
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Test Mihomo nodes in a proxy group and optionally select one."
+    )
+    parser.add_argument("--group", default="PROXY", help="proxy group name, default: PROXY")
+    parser.add_argument("--url", default=DEFAULT_URL, help=f"delay test URL, default: {DEFAULT_URL}")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_MS, help="per-node timeout in ms")
+    parser.add_argument("--jobs", type=int, default=12, help="concurrent tests, default: 12")
+    parser.add_argument("--sort", action="store_true", help="display nodes sorted by latency")
+    parser.add_argument("--best", action="store_true", help="select the fastest available node")
+    parser.add_argument("--pick", nargs="?", const="", help="select displayed index; prompt when omitted")
+    parser.add_argument("--include-info", action="store_true", help="include subscription info entries")
+    parser.add_argument("--show-errors", action="store_true", help="print failure details after the table")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    api = detect_api()
+    group_data = api_json(api, f"/proxies/{quote(args.group, safe='')}")
+    nodes = group_data.get("all") or []
+    current = group_data.get("now", "")
+    if not args.include_info:
+        nodes = [name for name in nodes if not is_info_node(name)]
+    if not nodes:
+        print(f"No nodes returned for group {args.group!r}.", file=sys.stderr)
+        return 1
+
+    with ThreadPoolExecutor(max_workers=max(args.jobs, 1)) as executor:
+        futures = [executor.submit(test_node, api, name, args.url, args.timeout) for name in nodes]
+        results = [future.result() for future in as_completed(futures)]
+
+    best_results = sorted_results(results)
+    results = best_results if args.sort else original_order_results(results, nodes)
+    print_results(results, current)
+
+    if args.show_errors:
+        failed = [item for item in results if item["delay"] is None]
+        if failed:
+            print("Failure details:")
+            for item in failed:
+                print(f"- {item['name']}: {item['error']}")
+
+    available = [item for item in best_results if item["delay"] is not None]
+    if args.best:
+        if not available:
+            print("No available node to select.", file=sys.stderr)
+            return 1
+        selected = available[0]["name"]
+        choose_node(api, args.group, selected)
+        print(f"Selected fastest node: {selected} ({available[0]['delay']} ms)")
+        return 0
+
+    if args.pick is not None:
+        if args.pick == "":
+            if not sys.stdin.isatty():
+                print("No TTY input. Use: mihomo_test --pick <idx>", file=sys.stderr)
+                return 2
+            args.pick = input("Select displayed idx: ").strip()
+        if not args.pick.isdigit():
+            print("Index must be a number.", file=sys.stderr)
+            return 1
+        idx = int(args.pick)
+        if idx < 0 or idx >= len(results):
+            print(f"Index out of range: {idx}", file=sys.stderr)
+            return 1
+        if results[idx]["delay"] is None:
+            print(f"Refusing to select failed node: {results[idx]['name']}", file=sys.stderr)
+            return 1
+        selected = results[idx]["name"]
+        choose_node(api, args.group, selected)
+        print(f"Selected node: {selected} ({results[idx]['delay']} ms)")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

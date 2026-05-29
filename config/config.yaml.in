@@ -1,0 +1,38 @@
+mixed-port: 31890
+socks-port: 31891
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: true
+external-controller: 127.0.0.1:31990
+
+profile:
+  store-selected: true
+  store-fake-ip: false
+
+proxy-providers:
+  subscription:
+    type: file
+    path: ./providers/subscription.yaml
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+
+proxy-groups:
+  - name: PROXY
+    type: url-test
+    use:
+      - subscription
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+rules:
+  - DOMAIN-SUFFIX,openai.com,PROXY
+  - DOMAIN-SUFFIX,ai.com,PROXY
+  - DOMAIN-SUFFIX,chatgpt.com,PROXY
+  - GEOIP,lan,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
+  - MATCH,PROXY
+

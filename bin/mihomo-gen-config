@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+confdir="${MIHOMO_HOME:-$HOME/.config/mihomo}"
+subscription_file="${MIHOMO_SUBSCRIPTION_FILE:-$confdir/subscription.url}"
+provider_path="${MIHOMO_PROVIDER_FILE:-$confdir/providers/subscription.yaml}"
+template_file="${MIHOMO_TEMPLATE_FILE:-$confdir/config.yaml.in}"
+config_file="${MIHOMO_CONFIG_FILE:-$confdir/config.yaml}"
+
+mkdir -p "$confdir/providers"
+chmod 700 "$confdir" "$confdir/providers" 2>/dev/null || true
+
+if [ ! -f "$subscription_file" ]; then
+  echo "Error: $subscription_file not found." >&2
+  echo "Create it with your subscription URL, or run: mihomo_set_sub '<url>'" >&2
+  exit 1
+fi
+
+url=$(tr -d '\r\n[:space:]' < "$subscription_file")
+if [ -z "$url" ]; then
+  echo "Error: subscription URL is empty: $subscription_file" >&2
+  exit 1
+fi
+
+download_url=$(python3 - "$url" <<'PY'
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+import sys
+
+raw = sys.argv[1]
+parts = urlsplit(raw)
+query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "flag"]
+query.append(("flag", "clash.meta"))
+print(urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)))
+PY
+)
+
+echo "Downloading subscription via curl (flag=clash.meta)."
+if curl -k -fsSL \
+  -A "ClashMeta; ClashVerge/1.5.11; Mihomo/1.18.3" \
+  -o "$provider_path" \
+  "$download_url"; then
+  chmod 600 "$provider_path"
+  if grep -q "^proxies:" "$provider_path"; then
+    echo "Successfully updated providers/subscription.yaml"
+  else
+    echo "Error: downloaded content does not seem to contain a proxies section." >&2
+    exit 1
+  fi
+else
+  echo "Error: curl download failed." >&2
+  exit 1
+fi
+
+if [ ! -f "$template_file" ]; then
+  echo "Error: template not found: $template_file" >&2
+  exit 1
+fi
+
+python3 - "$template_file" "$config_file" "$url" <<'PY'
+from pathlib import Path
+import sys
+
+template_file = Path(sys.argv[1])
+config_file = Path(sys.argv[2])
+url = sys.argv[3]
+
+template = template_file.read_text(encoding="utf-8")
+config_file.write_text(template.replace("__SUBSCRIPTION_URL__", url), encoding="utf-8")
+config_file.chmod(0o600)
+print(f"Successfully generated {config_file}.")
+PY
+
