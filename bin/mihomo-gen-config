@@ -2,7 +2,7 @@
 set -euo pipefail
 
 confdir="${MIHOMO_HOME:-$HOME/.config/mihomo}"
-subscription_file="${MIHOMO_SUBSCRIPTION_FILE:-$confdir/subscription.url}"
+subscription_file="$HOME/.local/bin/subscription.url"
 provider_path="${MIHOMO_PROVIDER_FILE:-$confdir/providers/subscription.yaml}"
 template_file="${MIHOMO_TEMPLATE_FILE:-$confdir/config.yaml.in}"
 config_file="${MIHOMO_CONFIG_FILE:-$confdir/config.yaml}"
@@ -69,4 +69,3 @@ config_file.write_text(template.replace("__SUBSCRIPTION_URL__", url), encoding="
 config_file.chmod(0o600)
 print(f"Successfully generated {config_file}.")
 PY
-

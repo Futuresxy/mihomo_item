@@ -69,8 +69,6 @@ mihomo_set_sub '你的订阅地址'
 ~/.local/bin/subscription.url
 ```
 
-安装脚本会把 `~/.config/mihomo/subscription.url` 链接到这个文件，所以旧路径也能继续用。
-
 订阅下载会自动使用 `flag=clash.meta`。使用 `mihomo_set_sub` 时不用手动加；手动编辑时只写原始订阅地址也可以，`mihomo_restart` 下载时会自动补充/替换。
 
 ## 可能需要修改哪里

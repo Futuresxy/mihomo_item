@@ -7,8 +7,7 @@ bindir="${MIHOMO_BIN_DIR:-$HOME/.local/bin}"
 unitdir="${MIHOMO_SYSTEMD_USER_DIR:-$HOME/.config/systemd/user}"
 proxy_port="${MIHOMO_PROXY_PORT:-31890}"
 controller_port="${MIHOMO_CONTROLLER_PORT:-31990}"
-subscription_file="${MIHOMO_SUBSCRIPTION_FILE:-$bindir/subscription.url}"
-subscription_link="$confdir/subscription.url"
+subscription_file="$bindir/subscription.url"
 
 usage() {
   cat <<'EOF'
@@ -103,29 +102,12 @@ dst.chmod(0o600)
 PY
 
 if [ ! -f "$subscription_file" ]; then
-  if [ -f "$subscription_link" ] && [ ! -L "$subscription_link" ]; then
-    install -m 600 "$subscription_link" "$subscription_file"
-    echo "Migrated existing subscription file to: $subscription_file"
-  else
-    install -m 600 "$repo_dir/config/subscription.url.example" "$subscription_file"
-    echo "Created example subscription file: $subscription_file"
-    echo "Edit it before running mihomo_restart."
-  fi
+  install -m 600 "$repo_dir/config/subscription.url.example" "$subscription_file"
+  echo "Created example subscription file: $subscription_file"
+  echo "Edit it before running mihomo_restart."
 else
   chmod 600 "$subscription_file" 2>/dev/null || true
 fi
-
-if [ -e "$subscription_link" ] || [ -L "$subscription_link" ]; then
-  if [ ! -L "$subscription_link" ]; then
-    backup="$subscription_link.backup.$(date +%Y%m%d%H%M%S)"
-    mv "$subscription_link" "$backup"
-    echo "Backed up old config subscription file to: $backup"
-  else
-    rm -f "$subscription_link"
-  fi
-fi
-ln -s "$subscription_file" "$subscription_link"
-echo "Linked $subscription_link -> $subscription_file"
 
 helper_block="$(mktemp)"
 trap 'rm -f "$helper_block"' EXIT
@@ -168,6 +150,11 @@ _mihomo_check_binary() {
   fi
   if [ ! -f "$bin" ]; then
     echo "mihomo path is not a regular file: $bin" >&2
+    if [ -d "$bin" ]; then
+      echo "It is a directory. Put the actual mihomo executable at this exact path." >&2
+      echo "Current directory contents:" >&2
+      ls -la "$bin" >&2
+    fi
     return 1
   fi
   if [ ! -x "$bin" ]; then
@@ -278,9 +265,9 @@ query.append(("flag", "clash.meta"))
 print(urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)))
 PY
 )"
-  mkdir -p "$HOME/.config/mihomo"
-  printf '%s\n' "$normalized_url" > "$HOME/.config/mihomo/subscription.url"
-  chmod 600 "$HOME/.config/mihomo/subscription.url"
+  mkdir -p "$HOME/.local/bin"
+  printf '%s\n' "$normalized_url" > "$HOME/.local/bin/subscription.url"
+  chmod 600 "$HOME/.local/bin/subscription.url"
   "$HOME/.local/bin/mihomo-gen-config" || return
   if _mihomo_user_systemd_available; then
     systemctl --user restart mihomo
