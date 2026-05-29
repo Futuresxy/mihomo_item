@@ -158,11 +158,31 @@ _mihomo_is_running() {
   kill -0 "$pid" >/dev/null 2>&1
 }
 
+_mihomo_check_binary() {
+  local bin
+  bin="$HOME/.local/bin/mihomo"
+  if [ ! -e "$bin" ]; then
+    echo "mihomo binary not found: $bin" >&2
+    echo "Put the mihomo binary there, then run: chmod +x $bin" >&2
+    return 1
+  fi
+  if [ ! -f "$bin" ]; then
+    echo "mihomo path is not a regular file: $bin" >&2
+    return 1
+  fi
+  if [ ! -x "$bin" ]; then
+    echo "mihomo binary is not executable: $bin" >&2
+    echo "Fix it with: chmod +x $bin" >&2
+    return 1
+  fi
+}
+
 mihomo_start() {
   if _mihomo_user_systemd_available; then
     systemctl --user start mihomo
     return
   fi
+  _mihomo_check_binary || return
   if _mihomo_is_running; then
     echo "mihomo is already running with pid $(cat "$(_mihomo_pid_file)")"
     return 0
@@ -175,6 +195,13 @@ mihomo_start() {
   echo "$!" > "$(_mihomo_pid_file)"
   echo "Started mihomo without systemd, pid $!"
   echo "Log: $HOME/.config/mihomo/mihomo.log"
+  sleep 1
+  if ! _mihomo_is_running; then
+    rm -f "$(_mihomo_pid_file)"
+    echo "mihomo exited immediately. Last log lines:" >&2
+    tail -n 40 "$HOME/.config/mihomo/mihomo.log" >&2
+    return 1
+  fi
 }
 
 mihomo_stop() {

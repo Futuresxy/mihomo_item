@@ -229,6 +229,18 @@ mihomo_restart
 ~/.config/mihomo/mihomo.log
 ```
 
+如果看到 `Exit 126`，通常表示 `~/.local/bin/mihomo` 不能执行。检查：
+
+```bash
+ls -l ~/.local/bin/mihomo
+file ~/.local/bin/mihomo
+chmod +x ~/.local/bin/mihomo
+~/.local/bin/mihomo -v
+tail -n 40 ~/.config/mihomo/mihomo.log
+```
+
+常见原因是没有执行权限、下载了错误 CPU 架构的 Mihomo 二进制，或者目录所在文件系统禁止执行。
+
 可以在有 user bus 的会话中执行：
 
 ```bash
